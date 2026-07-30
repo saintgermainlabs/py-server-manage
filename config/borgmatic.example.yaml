@@ -1,0 +1,31 @@
+# Example borgmatic configuration (generated/adapted in a later phase).
+# Do not put passphrases in this file.
+
+source_directories:
+  - /data/coolify
+  - /srv/projects
+  - /opt
+  - /home/dom/projects
+
+repositories:
+  - path: ssh://STORAGE_USER@STORAGE_HOST:23/./borg/server-primary
+    label: storagebox
+
+exclude_patterns:
+  - /proc
+  - /sys
+  - /dev
+  - /run
+  - /tmp
+  - /var/tmp
+  - /var/cache
+  - /var/lib/docker/overlay2
+  - /var/lib/docker/image
+
+keep_within: 48H
+keep_daily: 14
+keep_weekly: 8
+keep_monthly: 12
+keep_yearly: 3
+
+encryption_passphrase: ""  # load from environment / credentials.env instead

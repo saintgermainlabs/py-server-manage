@@ -1,0 +1,85 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
+*.py[cod]
+.env
+config/*.yaml
+!config/example.yaml
+!config/serverops.example.yaml
+!config/backup.example.yaml
+!config/borgmatic.example.yaml
+!config/logging.yaml
+data/*
+!data/.gitkeep
+!data/inventory/
+!data/reports/
+!data/backups/
+!data/restore-tests/
+!data/encrypted/
+!data/encrypted/inventory/
+data/encrypted/inventory/*
+!data/encrypted/inventory/.gitkeep
+# Transit ciphertext is opaque and intentionally commit-able.
+!data/encrypted/inventory/*.enc
+data/inventory/*
+!data/inventory/.gitkeep
+data/reports/*
+!data/reports/.gitkeep
+data/backups/*
+!data/backups/.gitkeep
+data/restore-tests/*
+!data/restore-tests/.gitkeep
+data/transformed/*
+!data/transformed/.gitkeep
+
+# Encrypted inventory snapshots are safe to commit, raw plaintext is not.
+# Ensure no plaintext leaks alongside .enc files.
+*.enc.yaml
+*.enc.json
+
+# Environment and credential files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*.pub
+
+# Borgmatic / backup configs with embedded credentials
+borgmatic.yaml
+borgmatic/*.yaml
+!config/borgmatic.example.yaml
+
+# SSH known hosts overrides and agent sockets
+known_hosts_override
+.ssh/
+
+# Local Vault token files
+.vault-token
+vault-token
+
+# Aider (history/cache only; commit .aider.conf.yml)
+.aider*
+!.aider.conf.yml
+!.aiderignore
+
+# Kilo Code local installs
+.kilo/node_modules/
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Generated reports and notebooks
+*.html
+*.pdf
+reports/
+Untitled

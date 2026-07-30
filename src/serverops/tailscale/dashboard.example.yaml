@@ -1,0 +1,18 @@
+# Optional per-app overrides for the dashboard inventory profile.
+#
+# Nodes are included automatically. Set enabled: false to omit a node.
+# Tailscale does not expose an application's HTTP scheme or port, so add url
+# here whenever the MagicDNS name alone is not the correct dashboard link.
+apps:
+  portal:
+    url: https://portal.tiger-bushmaster.ts.net
+    title: Portal
+    category: Infrastructure
+
+  authentik:
+    url: http://authentik.tiger-bushmaster.ts.net:9000
+    title: Authentik
+    category: Infrastructure
+
+  alexandrie:
+    enabled: false

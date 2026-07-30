@@ -1,0 +1,34 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+.vault-token
+
+# Encrypted files may be read, decrypted forms may not
+data/decrypted/
+data/private/
+*.dec
+*.plaintext
+
+# Generated and noisy content
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+node_modules/
+
+# Infrastructure state
+.terraform/
+*.tfstate
+*.tfstate.*

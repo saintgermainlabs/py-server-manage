@@ -1,0 +1,17 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "mcp": {
+    "github-mcp": {
+      "type": "remote",
+      "url": "https://api.github.github.com/",
+      "headers": {},
+      "oauth": {},
+      "enabled": true
+    },
+    "context7": {
+      "type": "local",
+      "command": ["echo", "Hello from context7"],
+      "enabled": true
+    }
+  }
+}

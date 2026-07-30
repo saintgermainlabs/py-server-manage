@@ -1,0 +1,18 @@
+default_target: local
+allow_mutations: false
+command_timeout_seconds: 20
+
+coolify:
+  base_url: "https://coolify.example.com"
+  # Put the token in COOLIFY_TOKEN, not in this file.
+  verify_tls: true
+
+targets:
+  local:
+    kind: local
+  production:
+    kind: ssh
+    host: "server.example.com"
+    user: "ops"
+    port: 22
+

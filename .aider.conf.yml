@@ -1,0 +1,14 @@
+# Project defaults for Aider + OpenRouter.
+# API key lives in .env.local (gitignored); mise and Aider both load it.
+# Docs: https://aider.chat/docs/llms/openrouter.html
+
+model: openrouter/anthropic/claude-sonnet-4
+weak-model: openrouter/google/gemini-2.5-flash
+env-file: .env.local
+
+# Repo .gitignore already covers .aider* (with !.aider.conf.yml).
+# Avoid aider rewriting gitignore on each launch.
+gitignore: false
+auto-commits: false
+attribute-author: false
+attribute-committer: false

@@ -1,0 +1,72 @@
+version: 1
+
+server:
+  name: hetzner-primary
+  staging_directory: /var/lib/server-backup/staging
+  restore_directory: /var/lib/server-backup/restore
+  lock_file: /run/lock/server-backup.lock
+
+deploy:
+  # Paths used when installing on the Hetzner host (not the laptop).
+  install_root: /opt/py-server-manage
+  config_dir: /etc/server-backup
+  credentials_file: /etc/server-backup/credentials.env
+  borgmatic_config: /etc/borgmatic/config.yaml
+  systemd_dir: /etc/systemd/system
+  packages:
+    - borgbackup
+    - borgmatic
+
+repository:
+  # Fill in on the server only. Do not commit real hostnames or secrets.
+  url: ssh://STORAGE_USER@STORAGE_HOST:23/./borg/server-primary
+  ssh_key: /root/.ssh/server-backup-storagebox
+  passphrase_environment_variable: BORG_PASSPHRASE
+
+sources:
+  mandatory:
+    - /data/coolify
+    - /srv/projects
+    - /opt
+    - /home/dom/projects
+  host_configuration:
+    - /etc
+    - /usr/local/bin
+    - /usr/local/sbin
+    - /root/.ssh
+  additional: []
+
+exclusions:
+  - /proc
+  - /sys
+  - /dev
+  - /run
+  - /tmp
+  - /var/tmp
+  - /var/cache
+  - /var/lib/docker/overlay2
+  - /var/lib/docker/image
+
+databases: []
+
+retention:
+  keep_within: 48H
+  keep_daily: 14
+  keep_weekly: 8
+  keep_monthly: 12
+  keep_yearly: 3
+
+checks:
+  lightweight_every_run: true
+  full_check_weekly: true
+
+monitoring:
+  enabled: false
+  start_url_env: BACKUP_START_URL
+  success_url_env: BACKUP_SUCCESS_URL
+  failure_url_env: BACKUP_FAILURE_URL
+
+scheduling:
+  nightly_calendar: "*-*-* 03:00:00"
+  randomized_delay_seconds: 1800
+  persistent: true

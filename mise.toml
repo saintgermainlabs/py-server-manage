@@ -1,0 +1,39 @@
+[tools]
+python = "3.12"
+uv = "latest"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+
+_.file = [
+  ".env",
+  { path = ".env.local", redact = true }
+]
+
+[tasks.setup]
+description = "Create the environment and install development dependencies"
+run = "uv sync --all-extras"
+
+[tasks.check]
+description = "Run formatting checks and tests"
+depends = ["lint", "test"]
+
+[tasks.lint]
+run = "uv run ruff check ."
+
+[tasks.format]
+run = "uv run ruff format ."
+
+[tasks.test]
+run = "uv run pytest"
+
+[tasks.cli]
+description = "Run the ServerOps CLI (pass arguments after --)"
+run = "uv run serverops"
+
+[tasks.aider]
+description = "Run Aider via OpenRouter (OPENROUTER_API_KEY from .env.local)"
+run = "{{env.HOME}}/.local/bin/aider"
+
+[shell_alias]
+pymans = "uv run serverops"
