@@ -11,6 +11,7 @@ deploy:
   install_root: /opt/py-server-manage
   config_dir: /etc/server-backup
   credentials_file: /etc/server-backup/credentials.env
+  databases_file: /etc/server-backup/databases.yaml
   borgmatic_config: /etc/borgmatic/config.yaml
   systemd_dir: /etc/systemd/system
   packages:
@@ -25,7 +26,7 @@ repository:
 
 sources:
   mandatory:
-    - /data/coolify
+    - /data
     - /srv/projects
     - /opt
     - /home/dom/projects
@@ -48,6 +49,9 @@ exclusions:
   - /var/lib/docker/image
 
 databases: []
+# Prefer the dedicated allowlist rendered by Vault Agent:
+#   /etc/server-backup/databases.yaml
+# See config/databases.example.yaml and deploy/vault-agent/.
 
 retention:
   keep_within: 48H

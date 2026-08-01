@@ -7,6 +7,10 @@ import time
 from .models import CommandResult, Target
 
 READ_ONLY_PREFIXES = {
+    ("borg", "info"),
+    ("borg", "list"),
+    ("borgmatic", "check"),
+    ("borgmatic", "list"),
     ("df",),
     ("docker", "compose", "config"),
     ("docker", "inspect"),
@@ -45,6 +49,7 @@ def run_command(
     target: Target,
     timeout: int,
     allow_mutation: bool = False,
+    env: dict[str, str] | None = None,
 ) -> CommandResult:
     if not allow_mutation and not is_read_only(argv):
         raise PermissionError(f"Command is not in the read-only allowlist: {shlex.join(argv)}")
@@ -72,6 +77,7 @@ def run_command(
         text=True,
         timeout=timeout,
         check=False,
+        env=env,
     )
     return CommandResult(
         argv=effective,

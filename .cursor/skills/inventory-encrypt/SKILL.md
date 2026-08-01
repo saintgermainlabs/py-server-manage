@@ -2,8 +2,9 @@
 name: inventory-encrypt
 description: >-
   Produce Coolify and Tailscale inventories, encrypt them with Vault Transit,
-  and prepare encrypted snapshots for git. Use when collecting inventories,
-  encrypting with Vault, refreshing AppRole/Tailscale credentials, or preparing
+  build/encrypt the databases allowlist, and prepare encrypted snapshots for
+  git. Use when collecting inventories, encrypting with Vault, building
+  databases.yaml, refreshing AppRole/Tailscale credentials, or preparing
   encrypted inventory files before a push.
 ---
 
@@ -87,12 +88,25 @@ for f in \
   data/inventory/tailscale-api-nodes.yaml \
   data/inventory/tailscale-inventory.yaml \
   data/inventory/system-state.yaml \
-  data/inventory/backup-inventory.yaml
+  data/inventory/backup-inventory.yaml \
+  data/inventory/databases.yaml
 do
   [ -f "$f" ] || continue
   mise run cli -- inventory encrypt "$f"
 done
 ```
+
+Optional database allowlist (after decrypting Coolify / backup inventories):
+
+```bash
+mise run cli -- backup build-databases-allowlist --dry-run
+mise run cli -- backup build-databases-allowlist --apply
+mise run cli -- backup encrypt-databases
+# → data/encrypted/inventory/databases.yaml.enc
+```
+
+Credentials in `databases.yaml` must stay `VAULT_PLACEHOLDER_*` (or be injected
+from KV at dump time). Do not commit plaintext passwords.
 
 Outputs: `data/encrypted/inventory/<basename>.enc` (opaque `vault:v1:…` ciphertext).
 Plaintext is **not** deleted.

@@ -9,51 +9,86 @@ Develop on your laptop, push to git, then deploy and operate backups on the serv
 Laptop (dev)  →  git push  →  Git remote
                                   ↓
                          Hetzner Ubuntu host
-                    /opt/py-server-manage (this repo)
+                    /opt/py-server-manage (preferred)
+                    or ~/py-server-manage
                     serverops + borg + borgmatic
-                    systemd timers (later)
+                    systemd timers (enable only after first good run)
                                   ↓
                          Hetzner Storage Box :23
+                         ssh://USER@HOST:23/./borg/server-primary
 ```
+
+**Repository** here means the encrypted Borg store on the Storage Box — not a git
+repo.
 
 ## Deploy the repo on the server
 
-As a sudo-capable user (then use root for backup install):
+Preferred (root-owned install root):
 
 ```bash
 sudo mkdir -p /opt
-sudo git clone YOUR_GIT_URL /opt/py-server-manage
+sudo git clone https://github.com/saintgermainlabs/py-server-manage.git /opt/py-server-manage
 cd /opt/py-server-manage
 sudo uv sync --all-extras
+```
+
+If passwordless `/opt` install is unavailable, a user clone works for bring-up:
+
+```bash
+git clone https://github.com/saintgermainlabs/py-server-manage.git ~/py-server-manage
+cd ~/py-server-manage
+uv sync --all-extras
 ```
 
 Later updates:
 
 ```bash
-cd /opt/py-server-manage
-sudo git pull
-sudo uv sync --all-extras
+cd /opt/py-server-manage   # or ~/py-server-manage
+git pull                   # use sudo if the tree is root-owned
+uv sync --all-extras
 ```
+
+### `uv` under sudo
+
+`uv` is often installed only for the login user (`~/.local/bin/uv`). Plain
+`sudo uv` fails with `command not found`. Use:
+
+```bash
+sudo /home/dom/.local/bin/uv run serverops …
+# or
+sudo env "PATH=$PATH" uv run serverops …
+```
+
+### App config for mutating backup commands
+
+`sudo` loads config from **root’s** home, not `dom`’s:
+
+```bash
+sudo mkdir -p /root/.config/py-server-manage
+sudo tee /root/.config/py-server-manage/config.yaml >/dev/null <<'EOF'
+allow_mutations: true
+command_timeout_seconds: 300
+EOF
+```
+
+Without `allow_mutations: true`, `backup init --apply` and `backup run --apply`
+refuse to run. Raise `command_timeout_seconds` for Storage Box latency (default
+`20` is often too short).
 
 ## System packages
 
-On the server:
-
 ```bash
 sudo apt-get update
-sudo apt-get install -y borgbackup borgmatic \
-  postgresql-client default-mysql-client mongodb-database-tools
+sudo apt-get install -y borgbackup borgmatic
+# Optional DB clients when dump pipelines exist:
+# postgresql-client default-mysql-client mongodb-database-tools
 ```
-
-Adjust DB clients to match engines you actually run.
 
 ## Generate staged configs (safe)
 
-From the repo on the server:
-
 ```bash
-cd /opt/py-server-manage
-sudo uv run serverops backup generate-config
+cd ~/py-server-manage   # or /opt/py-server-manage
+sudo /home/dom/.local/bin/uv run serverops backup generate-config
 ```
 
 Writes under `data/backups/generated/`:
@@ -62,31 +97,16 @@ Writes under `data/backups/generated/`:
 - `credentials.env.example`
 - `server-backup.service` / `.timer`
 - `server-backup-check.service` / `.timer`
-- `backup.yaml` (copy of resolved settings)
+- `backup.yaml`
 
-Review those files. Fill Storage Box placeholders **only** in server-local copies later.
+Review those files. Fill Storage Box placeholders **only** in server-local
+`/etc/…` copies after install — never commit real values.
 
 ## Preview install (default dry-run)
 
 ```bash
-sudo uv run serverops backup install
-# or explicitly:
-sudo uv run serverops backup install --dry-run
-```
-
-Shows planned package checks, directory creation, and file copies. Makes **no** changes.
-
-Apply (still refuses to overwrite live configs without `--force`):
-
-```bash
-sudo uv run serverops backup install --apply
-```
-
-Or use the wrapper script:
-
-```bash
-sudo ./deploy/scripts/install-backup-system.sh --dry-run
-sudo ./deploy/scripts/install-backup-system.sh --apply
+sudo /home/dom/.local/bin/uv run serverops backup install --dry-run
+sudo /home/dom/.local/bin/uv run serverops backup install --apply
 ```
 
 Live locations (created on apply):
@@ -102,44 +122,160 @@ Live locations (created on apply):
 
 Permissions for secrets: `root:root` and `0600`.
 
-## Storage Box credentials (server only — never commit)
+## Storage Box (server only — never commit)
 
-1. Create a Storage Box **sub-account** in Hetzner Robot/Cloud.
-2. On the **server**, generate a dedicated key if needed:
+### SSH key and connectivity
+
+1. Create a Storage Box **sub-account** in Hetzner Robot/Cloud (optional but
+   recommended).
+2. On the server, generate a dedicated key if needed:
 
 ```bash
 sudo ssh-keygen -t ed25519 -f /root/.ssh/server-backup-storagebox -N ""
 ```
 
-3. Authorize the public key for the Storage Box sub-account.
-4. Edit `/etc/server-backup/backup.yaml` repository URL:
+3. Authorize the **public** key for the Storage Box account.
+4. Test (port **23**, not 22):
+
+```bash
+sudo ssh -p 23 -i /root/.ssh/server-backup-storagebox \
+  -o BatchMode=yes -o ConnectTimeout=10 \
+  YOUR_USER@YOUR_HOST.your-storagebox.de exit
+echo $?   # expect 0
+```
+
+### Parent directory on the box
+
+Borg does **not** create missing parent directories. For
+`…/./borg/server-primary`, create `borg` first; `borg init` creates
+`server-primary`:
+
+```bash
+sudo ssh -p 23 -i /root/.ssh/server-backup-storagebox \
+  YOUR_USER@YOUR_HOST.your-storagebox.de mkdir borg
+```
+
+If `mkdir` over SSH is denied, create `borg` via SFTP / Robot UI.
+
+### Edit live configs
+
+Edit `/etc/server-backup/backup.yaml` (`sudoedit`):
 
 ```yaml
 repository:
-  url: ssh://uXXXXX-sub1@uXXXXX-sub1.your-storagebox.de:23/./borg/server-primary
+  url: ssh://uXXXXX@uXXXXX.your-storagebox.de:23/./borg/server-primary
   ssh_key: /root/.ssh/server-backup-storagebox
 ```
 
-5. Put the Borg passphrase in `/etc/server-backup/credentials.env`:
+Put the Borg passphrase in `/etc/server-backup/credentials.env` (`0600`):
 
 ```bash
-BORG_PASSPHRASE=...
+BORG_PASSPHRASE=…strong unique passphrase…
+# Optional later (healthchecks / cronitors) — leave commented until monitoring is on:
+# BACKUP_START_URL=
+# BACKUP_SUCCESS_URL=
+# BACKUP_FAILURE_URL=
 ```
 
-## First on-server checks
+Store the passphrase in 1Password. Losing it means backups cannot be restored.
+
+### Keep borgmatic in sync
+
+`backup init` uses `backup.yaml`. `backup list` / `run` use
+`/etc/borgmatic/config.yaml`. Both must have the **same real** repository URL.
+After editing `backup.yaml`, sync:
 
 ```bash
-cd /opt/py-server-manage
-sudo uv run serverops backup discover
-sudo uv run serverops backup preflight --config /etc/server-backup/backup.yaml
+sudo python3 - <<'PY'
+from pathlib import Path
+import yaml
+
+backup = yaml.safe_load(Path("/etc/server-backup/backup.yaml").read_text())
+url = backup["repository"]["url"]
+if "STORAGE_HOST" in url or "STORAGE_USER" in url:
+    raise SystemExit("backup.yaml still has placeholders")
+
+path = Path("/etc/borgmatic/config.yaml")
+cfg = yaml.safe_load(path.read_text())
+cfg["repositories"][0]["path"] = url
+path.write_text(yaml.safe_dump(cfg, sort_keys=False))
+print("Updated /etc/borgmatic/config.yaml")
+PY
 ```
 
-Preflight validates tools, mandatory paths, staging dirs, Docker, SSH key presence, and Storage Box host:23 when the URL is not a placeholder.
+## Preflight → init → first run
 
-## Not yet automated in this phase
+```bash
+cd ~/py-server-manage   # or /opt/py-server-manage
 
-- `borg init` / first archive
+sudo /home/dom/.local/bin/uv run serverops backup preflight \
+  --config /etc/server-backup/backup.yaml \
+  --require-credentials
+
+sudo /home/dom/.local/bin/uv run serverops backup init \
+  --config /etc/server-backup/backup.yaml --dry-run
+
+sudo /home/dom/.local/bin/uv run serverops backup init \
+  --config /etc/server-backup/backup.yaml --apply
+
+sudo /home/dom/.local/bin/uv run serverops backup list \
+  --config /etc/server-backup/backup.yaml
+
+sudo /home/dom/.local/bin/uv run serverops backup run \
+  --config /etc/server-backup/backup.yaml --dry-run
+
+sudo /home/dom/.local/bin/uv run serverops backup run \
+  --config /etc/server-backup/backup.yaml --apply
+```
+
+Do **not** enable `server-backup.timer` until a real `--apply` run succeeds.
+
+### Enable timers (after a successful apply)
+
+Installed units from `backup install` default to `/opt/py-server-manage`. If the
+repo lives under `/home/dom/py-server-manage`, rewrite the services first so they
+use that path **and** pass `--config /etc/server-backup/backup.yaml` (otherwise
+the example placeholders are used).
+
+Corrected unit templates are under `data/backups/generated/` after bring-up fixes.
+Install and enable:
+
+```bash
+cd ~/py-server-manage
+sudo cp data/backups/generated/server-backup.service \
+        data/backups/generated/server-backup-check.service \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now server-backup.timer
+sudo systemctl enable --now server-backup-check.timer
+sudo systemctl list-timers 'server-backup*'
+sudo systemctl status server-backup.timer server-backup-check.timer --no-pager
+```
+
+Optional one-shot smoke test without waiting for the calendar:
+
+```bash
+sudo systemctl start server-backup.service
+sudo journalctl -u server-backup.service -n 50 --no-pager
+```
+
+## Failure playbook
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `sudo: uv: command not found` | User-local uv not on root PATH | Full path to `~/.local/bin/uv` |
+| `allow_mutations: false` | Root app config missing | `/root/.config/py-server-manage/config.yaml` |
+| `Could not resolve hostname storage_host` | Placeholder left in borgmatic | Sync URL from `backup.yaml` |
+| `Permission denied` on `/etc/…` | Ran install without sudo | Re-run with sudo |
+| SSH to Storage Box fails | Wrong key/user/port | Test with `-p 23` and the dedicated key |
+| `borg init` fails missing parent | No `borg/` on the box | `mkdir borg` on the Storage Box |
+| Timeout during init/run | Default 20s too short | `command_timeout_seconds: 300` under root config |
+
+## Not yet automated
+
 - Enabling systemd timers with production credentials
-- Database dump pipeline
+- Database dump pipeline (files-only backups today)
+- Canonical move of a home clone into `/opt/py-server-manage`
 
-See [backup-operations.md](backup-operations.md) and [AGENT-BACKUP-IMPLEMENTATION-PLAN.md](../AGENT-BACKUP-IMPLEMENTATION-PLAN.md).
+See [backup-operations.md](backup-operations.md) and
+[AGENT-BACKUP-IMPLEMENTATION-PLAN.md](../AGENT-BACKUP-IMPLEMENTATION-PLAN.md).

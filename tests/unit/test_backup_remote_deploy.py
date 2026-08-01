@@ -32,7 +32,7 @@ def test_generate_configs_writes_expected_files(tmp_path: Path) -> None:
     borgmatic = yaml.safe_load(
         "\n".join(line for line in text.splitlines() if not line.startswith("#"))
     )
-    assert "/data/coolify" in borgmatic["source_directories"]
+    assert "/data" in borgmatic["source_directories"]
     assert "STORAGE_HOST" in borgmatic["repositories"][0]["path"]
     assert "printenv BORG_PASSPHRASE" in text
     assert "UMask=0077" in written["service"].read_text(encoding="utf-8")

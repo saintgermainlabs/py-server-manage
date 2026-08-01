@@ -42,7 +42,7 @@ def test_redact_value_strips_secrets() -> None:
 def test_load_backup_config_defaults() -> None:
     config = load_backup_config(Path("/does/not/exist.yaml"))
     assert config.server_name == "hetzner-primary"
-    assert "/data/coolify" in config.mandatory_sources
+    assert "/data" in config.mandatory_sources
 
 
 def test_load_backup_config_example() -> None:
@@ -88,7 +88,7 @@ def test_discover_and_write_reports(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
         "serverops.backup.discovery.coolify_inventory.discover_coolify",
         lambda: {
-            "root": {"path": "/data/coolify", "status": "missing"},
+            "root": {"path": "/data", "status": "missing"},
             "critical_items": [],
             "notes": [],
         },
@@ -99,6 +99,15 @@ def test_discover_and_write_reports(tmp_path: Path, monkeypatch) -> None:
     assert "POSTGRES_PASSWORD" in str(result) or True
     # Ensure no secret values appear even if env values were present.
     assert "super-secret" not in str(result)
+
+    from serverops.backup.discovery import database_dump_plan
+
+    plan = database_dump_plan(result)
+    assert plan["dry_run"] is True
+    assert plan["summary"]["would_native_dump"] == 1
+    assert plan["would_native_dump"][0]["stable_identity"] == "demo/db"
+    assert plan["would_native_dump"][0]["engine"] == "postgresql"
+    assert any("Dry-run only" in note for note in plan["notes"])
 
     inventory_file = tmp_path / "backup-inventory.yaml"
     report_file = tmp_path / "backup-inventory.md"

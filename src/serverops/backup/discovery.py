@@ -98,3 +98,58 @@ def _review_notes(
     if not databases:
         notes.append("No probable database containers detected; confirm manually on the server.")
     return notes
+
+
+def database_dump_plan(discovery_result: dict[str, Any]) -> dict[str, Any]:
+    """Build a read-only dry-run plan of native dumps (no dumps are executed)."""
+    databases = list(discovery_result.get("databases") or [])
+    would_dump: list[dict[str, Any]] = []
+    would_review: list[dict[str, Any]] = []
+    for item in databases:
+        method = item.get("proposed_backup_method")
+        entry = {
+            "container": item.get("container"),
+            "engine": item.get("engine"),
+            "image": item.get("image"),
+            "compose_project": item.get("compose_project"),
+            "compose_service": item.get("compose_service"),
+            "proposed_backup_method": method,
+            "stable_identity": _stable_identity(item),
+        }
+        if method == "native-dump":
+            would_dump.append(entry)
+        else:
+            would_review.append(entry)
+
+    notes = list(discovery_result.get("review_notes") or [])
+    notes.append(
+        "Dry-run only: no pg_dump/mysqldump/mongodump was executed. "
+        "Native dump pipeline is not implemented yet."
+    )
+    return redact_value(
+        {
+            "schema_version": 1,
+            "generated_at": utc_now(),
+            "dry_run": True,
+            "action": "discover-databases",
+            "summary": {
+                "probable_databases": len(databases),
+                "would_native_dump": len(would_dump),
+                "would_review": len(would_review),
+                "docker_available": bool(
+                    (discovery_result.get("docker") or {}).get("available")
+                ),
+            },
+            "would_native_dump": would_dump,
+            "would_review": would_review,
+            "notes": notes,
+        }
+    )
+
+
+def _stable_identity(item: dict[str, Any]) -> str:
+    project = item.get("compose_project")
+    service = item.get("compose_service")
+    if project and service:
+        return f"{project}/{service}"
+    return str(item.get("container") or "unknown")

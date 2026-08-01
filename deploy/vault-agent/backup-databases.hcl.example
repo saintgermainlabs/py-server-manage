@@ -1,0 +1,36 @@
+# Example Vault Agent stanza to render the database allowlist on the backup host.
+# Copy to the server (e.g. /etc/vault-agent.d/backup-databases.hcl), fix paths,
+# and run under a role that can read:
+#   secret/data/py-server-manage/backup/databases/*
+#
+# Do not commit real RoleIDs, SecretIDs, or rendered credential files.
+
+pid_file = "/run/vault-agent-backup-databases/agent.pid"
+
+vault {
+  address = "https://vault.tiger-bushmaster.ts.net"
+}
+
+auto_auth {
+  method "approle" {
+    config = {
+      role_id_file_path                   = "/etc/serverops/credentials/vault-role-id"
+      secret_id_file_path                 = "/etc/serverops/credentials/vault-secret-id"
+      remove_secret_id_file_after_reading = false
+    }
+  }
+
+  sink "file" {
+    config = {
+      path = "/run/vault-agent-backup-databases/token"
+      mode = 0600
+    }
+  }
+}
+
+template {
+  source      = "/opt/py-server-manage/deploy/vault-agent/templates/databases.yaml.ctmpl"
+  destination = "/etc/server-backup/databases.yaml"
+  perms       = "0600"
+  # command     = "systemctl try-reload-or-restart server-backup.service"
+}

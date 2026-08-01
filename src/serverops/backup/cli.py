@@ -10,6 +10,13 @@ import typer
 from serverops.app_state import emit, state
 from serverops.backup import discovery, inventory
 from serverops.backup.config import BackupConfigError, load_backup_config
+from serverops.backup.databases_config import (
+    DatabaseAllowlistError,
+    DEFAULT_DATABASES_PATH,
+    EXAMPLE_DATABASES_PATH,
+    load_database_allowlist,
+    reconcile_allowlist_with_discovery,
+)
 from serverops.backup.generate import default_output_dir, generate_configs
 from serverops.backup.install import install_backup_system
 from serverops.backup.preflight import run_preflight
@@ -82,6 +89,330 @@ def inventory_cmd(
 ) -> None:
     """Alias for discover — write backup inventory artifacts."""
     discover_cmd(config=config)
+
+
+@app.command("discover-databases")
+def discover_databases_cmd(
+    config: Annotated[
+        Path | None,
+        typer.Option(help="Optional backup YAML config path."),
+    ] = None,
+    databases_file: Annotated[
+        Path | None,
+        typer.Option(
+            help=(
+                "Database allowlist path (default: /etc/server-backup/databases.yaml, "
+                "else config/databases.example.yaml)."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Read-only dry-run: list probable DB containers and compare to allowlist."""
+    try:
+        backup_config = load_backup_config(config)
+        result = discovery.discover(
+            target=state.target,
+            timeout=state.config.command_timeout_seconds,
+            config=backup_config,
+        )
+        plan = discovery.database_dump_plan(result)
+        allowlist_path = databases_file
+        if allowlist_path is None:
+            deploy_path = Path(backup_config.deploy.databases_file)
+            if deploy_path.is_file():
+                allowlist_path = deploy_path
+            elif DEFAULT_DATABASES_PATH.is_file():
+                allowlist_path = DEFAULT_DATABASES_PATH
+            elif EXAMPLE_DATABASES_PATH.is_file():
+                allowlist_path = EXAMPLE_DATABASES_PATH
+        allowlist = load_database_allowlist(allowlist_path)
+        reconciliation = reconcile_allowlist_with_discovery(
+            allowlist,
+            list(result.get("databases") or []),
+        )
+        plan["allowlist_path"] = str(allowlist_path) if allowlist_path else None
+        plan["allowlist"] = reconciliation
+    except (
+        BackupConfigError,
+        DatabaseAllowlistError,
+        OSError,
+        PermissionError,
+        ValueError,
+    ) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    if state.json_output:
+        emit(plan)
+        return
+
+    summary = plan.get("summary") or {}
+    typer.echo(
+        "Database discovery dry-run: "
+        f"{summary.get('probable_databases')} probable, "
+        f"{summary.get('would_native_dump')} would native-dump, "
+        f"{summary.get('would_review')} need review "
+        f"(docker_available={summary.get('docker_available')})."
+    )
+    if plan.get("allowlist_path"):
+        typer.echo(f"Allowlist: {plan['allowlist_path']}")
+    dumps = plan.get("would_native_dump") or []
+    if dumps:
+        typer.echo("Discovered — would native-dump (advisory):")
+        for item in dumps:
+            typer.echo(
+                f"  - {item.get('stable_identity')} "
+                f"[{item.get('engine')}] container={item.get('container')}"
+            )
+    reviews = plan.get("would_review") or []
+    if reviews:
+        typer.echo("Discovered — would review (not auto-dump):")
+        for item in reviews:
+            typer.echo(
+                f"  - {item.get('stable_identity')} "
+                f"[{item.get('engine')}] method={item.get('proposed_backup_method')} "
+                f"container={item.get('container')}"
+            )
+    allow = plan.get("allowlist") or {}
+    allow_summary = allow.get("summary") or {}
+    if allow_summary:
+        typer.echo(
+            "Allowlist reconciliation: "
+            f"{allow_summary.get('matched')} matched, "
+            f"{allow_summary.get('missing_runtime')} missing at runtime, "
+            f"{allow_summary.get('discovered_not_allowlisted')} discovered but not listed."
+        )
+    for note in plan.get("notes") or []:
+        typer.echo(f"  note: {note}")
+
+
+@app.command("build-databases-allowlist")
+def build_databases_allowlist_cmd(
+    backup_inventory: Annotated[
+        Path | None,
+        typer.Option(
+            help="backup-inventory.yaml from `backup discover` "
+            "(default: data/inventory/backup-inventory.yaml)."
+        ),
+    ] = None,
+    coolify_inventory: Annotated[
+        Path | None,
+        typer.Option(
+            help="Coolify inventory YAML (default: data/inventory/coolify-inventory.yaml)."
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "-o",
+            "--output",
+            help="Write path when using --apply (default: data/inventory/databases.yaml).",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run/--apply",
+            help="Preview by default; --apply writes the allowlist YAML.",
+        ),
+    ] = True,
+) -> None:
+    """Build databases.yaml from inventories with Vault KV placeholders (no secrets)."""
+    from serverops.backup.allowlist_build import (
+        allowlist_to_yaml,
+        build_databases_allowlist,
+        load_yaml_mapping,
+    )
+    from serverops.paths import (
+        DEFAULT_DATABASES_ALLOWLIST,
+        inventory_path,
+    )
+
+    backup_path = backup_inventory or inventory_path("backup-inventory.yaml")
+    coolify_path = coolify_inventory or inventory_path("coolify-inventory.yaml")
+    out_path = output or DEFAULT_DATABASES_ALLOWLIST
+
+    try:
+        backup_data = load_yaml_mapping(backup_path) if backup_path.is_file() else None
+        coolify_data = load_yaml_mapping(coolify_path) if coolify_path.is_file() else None
+        if backup_data is None and coolify_data is None:
+            raise FileNotFoundError(
+                f"Need at least one inventory file "
+                f"(tried {backup_path} and {coolify_path}). "
+                "Decrypt Coolify inventory and/or run backup discover first."
+            )
+        allowlist, report = build_databases_allowlist(
+            backup_inventory=backup_data,
+            coolify_inventory=coolify_data,
+        )
+        yaml_text = allowlist_to_yaml(allowlist)
+    except (OSError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    report["dry_run"] = dry_run
+    report["output"] = str(out_path)
+    report["entries"] = [
+        {
+            "id": e.id,
+            "engine": e.engine,
+            "dump": e.dump,
+            "container_name": e.container_name,
+            "coolify_uuid": e.coolify_uuid,
+            "vault_path": e.vault.path if e.vault else None,
+        }
+        for e in allowlist.databases
+    ]
+
+    if not dry_run:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(yaml_text, encoding="utf-8")
+        report["written"] = True
+
+    if state.json_output:
+        emit(report)
+        return
+
+    mode = "DRY-RUN" if dry_run else "APPLY"
+    summary = report.get("summary") or {}
+    typer.echo(
+        f"Build databases allowlist ({mode}): "
+        f"{summary.get('entries')} entries "
+        f"(native={summary.get('native')}, skip={summary.get('skip')}) "
+        f"sources={report.get('sources_used')}"
+    )
+    for entry in report.get("entries") or []:
+        typer.echo(
+            f"  - {entry.get('id')} [{entry.get('engine')}] "
+            f"dump={entry.get('dump')} container={entry.get('container_name')} "
+            f"uuid={entry.get('coolify_uuid')}"
+        )
+    if dry_run:
+        typer.echo(f"Would write: {out_path}")
+        typer.echo("Re-run with --apply to write, then:")
+        typer.echo(f"  serverops inventory encrypt {out_path}")
+    else:
+        typer.echo(f"Wrote {out_path}")
+        typer.echo(f"Encrypt: serverops inventory encrypt {out_path}")
+    for note in report.get("notes") or []:
+        typer.echo(f"  note: {note}")
+
+
+@app.command("encrypt-databases")
+def encrypt_databases_cmd(
+    file: Annotated[
+        Path | None,
+        typer.Argument(help="Plaintext databases.yaml (default: data/inventory/databases.yaml)."),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option("-o", "--output", help="Ciphertext path."),
+    ] = None,
+    vault_addr: Annotated[str | None, typer.Option("--vault-addr")] = None,
+    vault_token: Annotated[
+        str | None,
+        typer.Option("--vault-token", hide_input=True),
+    ] = None,
+    vault_role_id: Annotated[
+        str | None,
+        typer.Option("--vault-role-id", hide_input=True),
+    ] = None,
+    vault_secret_id: Annotated[
+        str | None,
+        typer.Option("--vault-secret-id", hide_input=True),
+    ] = None,
+) -> None:
+    """Encrypt databases allowlist with Vault Transit (same as inventory encrypt)."""
+    from serverops.paths import (
+        DEFAULT_DATABASES_ALLOWLIST,
+        DEFAULT_DATABASES_ALLOWLIST_ENC,
+        encrypted_inventory_output_path,
+    )
+    from serverops.vault import VaultError, create_vault_client, encrypt_inventory
+
+    source = file or DEFAULT_DATABASES_ALLOWLIST
+    if not source.is_file():
+        typer.echo(f"Error: file not found: {source}", err=True)
+        raise typer.Exit(1)
+    out_path = output or (
+        DEFAULT_DATABASES_ALLOWLIST_ENC
+        if source == DEFAULT_DATABASES_ALLOWLIST
+        else encrypted_inventory_output_path(source)
+    )
+    try:
+        client = create_vault_client(
+            vault_addr=vault_addr,
+            vault_token=vault_token,
+            role_id=vault_role_id,
+            secret_id=vault_secret_id,
+        )
+        ciphertext = encrypt_inventory(client, source.read_bytes())
+    except VaultError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(ciphertext + "\n", encoding="utf-8")
+    typer.echo(f"Encrypted {source} -> {out_path}")
+
+
+@app.command("decrypt-databases")
+def decrypt_databases_cmd(
+    file: Annotated[
+        Path | None,
+        typer.Argument(
+            help="Encrypted databases.yaml.enc "
+            "(default: data/encrypted/inventory/databases.yaml.enc)."
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option("-o", "--output", help="Plaintext output path."),
+    ] = None,
+    vault_addr: Annotated[str | None, typer.Option("--vault-addr")] = None,
+    vault_token: Annotated[
+        str | None,
+        typer.Option("--vault-token", hide_input=True),
+    ] = None,
+    vault_role_id: Annotated[
+        str | None,
+        typer.Option("--vault-role-id", hide_input=True),
+    ] = None,
+    vault_secret_id: Annotated[
+        str | None,
+        typer.Option("--vault-secret-id", hide_input=True),
+    ] = None,
+) -> None:
+    """Decrypt databases allowlist with Vault Transit (same as inventory decrypt)."""
+    from serverops.paths import (
+        DEFAULT_DATABASES_ALLOWLIST,
+        DEFAULT_DATABASES_ALLOWLIST_ENC,
+        decrypted_inventory_output_path,
+    )
+    from serverops.vault import VaultError, create_vault_client, decrypt_inventory
+
+    source = file or DEFAULT_DATABASES_ALLOWLIST_ENC
+    if not source.is_file():
+        typer.echo(f"Error: file not found: {source}", err=True)
+        raise typer.Exit(1)
+    out_path = output or (
+        DEFAULT_DATABASES_ALLOWLIST
+        if source == DEFAULT_DATABASES_ALLOWLIST_ENC
+        else decrypted_inventory_output_path(source)
+    )
+    try:
+        client = create_vault_client(
+            vault_addr=vault_addr,
+            vault_token=vault_token,
+            role_id=vault_role_id,
+            secret_id=vault_secret_id,
+        )
+        plaintext = decrypt_inventory(client, source.read_text(encoding="utf-8").strip())
+    except VaultError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(plaintext)
+    typer.echo(f"Decrypted {source} -> {out_path}")
 
 
 @app.command("validate-config")

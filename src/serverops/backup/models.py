@@ -42,6 +42,7 @@ class DeployConfig(BaseModel):
     install_root: str = "/opt/py-server-manage"
     config_dir: str = "/etc/server-backup"
     credentials_file: str = "/etc/server-backup/credentials.env"
+    databases_file: str = "/etc/server-backup/databases.yaml"
     borgmatic_config: str = "/etc/borgmatic/config.yaml"
     systemd_dir: str = "/etc/systemd/system"
     packages: list[str] = Field(default_factory=lambda: ["borgbackup", "borgmatic"])
@@ -71,7 +72,7 @@ class BackupConfigModel(BaseModel):
     lock_file: str = "/run/lock/server-backup.lock"
     mandatory_sources: list[str] = Field(
         default_factory=lambda: [
-            "/data/coolify",
+            "/data",
             "/srv/projects",
             "/opt",
             "/home/dom/projects",

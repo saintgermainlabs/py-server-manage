@@ -60,15 +60,19 @@ See [`docs/inventory-security.md`](docs/inventory-security.md) and [`docs/VAULT.
 
 ## Server deploy (Hetzner)
 
+Full guide: [`docs/backup-installation.md`](docs/backup-installation.md).
+
 ```bash
-sudo git clone YOUR_GIT_URL /opt/py-server-manage
+sudo git clone https://github.com/saintgermainlabs/py-server-manage.git /opt/py-server-manage
 cd /opt/py-server-manage
 sudo uv sync --all-extras
 sudo apt-get install -y borgbackup borgmatic
-sudo uv run serverops backup generate-config
-sudo uv run serverops backup install --dry-run
-sudo uv run serverops backup discover
-sudo uv run serverops backup preflight
+# If uv is only in the login user's ~/.local/bin:
+sudo /home/dom/.local/bin/uv run serverops backup generate-config
+sudo /home/dom/.local/bin/uv run serverops backup install --dry-run
+sudo /home/dom/.local/bin/uv run serverops backup install --apply
+# Then: edit /etc/server-backup/{backup.yaml,credentials.env}, sync borgmatic URL,
+# preflight → init --apply → run --dry-run → run --apply
 ```
 
 ## CLI modules
@@ -79,6 +83,9 @@ uv run serverops backup discover
 uv run serverops backup generate-config
 uv run serverops backup install --dry-run
 uv run serverops backup preflight
+uv run serverops backup init --dry-run
+uv run serverops backup list
+uv run serverops backup run --dry-run
 uv run serverops diagnostics doctor
 uv run serverops coolify health
 uv run serverops tailscale nodes

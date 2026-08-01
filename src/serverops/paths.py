@@ -13,6 +13,9 @@ REPORTS_DIR = DATA_DIR / "reports"
 BACKUPS_DIR = DATA_DIR / "backups"
 RESTORE_TESTS_DIR = DATA_DIR / "restore-tests"
 
+DEFAULT_DATABASES_ALLOWLIST = INVENTORY_DIR / "databases.yaml"
+DEFAULT_DATABASES_ALLOWLIST_ENC = ENCRYPTED_INVENTORY_DIR / "databases.yaml.enc"
+
 
 def encrypted_inventory_output_path(source: Path) -> Path:
     """Default ciphertext path for ``inventory encrypt``."""

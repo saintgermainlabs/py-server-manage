@@ -38,6 +38,11 @@ def _parse_json_lines(stdout: str) -> list[dict[str, Any]]:
     return items
 
 
+def classify_database_engine(image: str | None, env_names: list[str] | None = None) -> str | None:
+    """Public helper: map image/env hints to a database engine name."""
+    return _classify_database(image, env_names or [])
+
+
 def _classify_database(image: str | None, env_names: list[str]) -> str | None:
     blob = " ".join([image or "", *env_names]).lower()
     for hint in DB_IMAGE_HINTS:
