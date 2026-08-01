@@ -1,4 +1,5 @@
 default_target: local
+# Required on the Hetzner backup host for `backup init --apply` / `backup run --apply`.
 allow_mutations: false
 command_timeout_seconds: 20
 

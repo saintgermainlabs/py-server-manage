@@ -8,18 +8,24 @@ from typing import Annotated
 import typer
 
 from serverops.app_state import emit, state
-from serverops.backup import discovery, inventory
+from serverops.backup import borg, discovery, inventory
 from serverops.backup.config import BackupConfigError, load_backup_config
 from serverops.backup.databases_config import (
-    DatabaseAllowlistError,
     DEFAULT_DATABASES_PATH,
     EXAMPLE_DATABASES_PATH,
+    DatabaseAllowlistError,
     load_database_allowlist,
     reconcile_allowlist_with_discovery,
 )
 from serverops.backup.generate import default_output_dir, generate_configs
 from serverops.backup.install import install_backup_system
 from serverops.backup.preflight import run_preflight
+from serverops.backup.run import (
+    BackupLockError,
+    BackupRunError,
+    init_backup_repository,
+    run_backup,
+)
 
 app = typer.Typer(help="Host-level backup discovery and on-server Borg scaffolding.")
 
@@ -517,6 +523,13 @@ def preflight_cmd(
         bool,
         typer.Option("--skip-storage-box", help="Skip TCP check to Storage Box."),
     ] = False,
+    require_credentials: Annotated[
+        bool,
+        typer.Option(
+            "--require-credentials",
+            help="Treat missing SSH key/credentials/passphrase as errors.",
+        ),
+    ] = False,
 ) -> None:
     """Run on-server preflight checks (read-only)."""
     try:
@@ -526,6 +539,7 @@ def preflight_cmd(
             target=state.target,
             timeout=state.config.command_timeout_seconds,
             check_storage_box=not skip_storage_box,
+            require_credentials=require_credentials,
         )
     except (BackupConfigError, OSError, PermissionError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
@@ -544,22 +558,164 @@ def preflight_cmd(
         raise typer.Exit(1)
 
 
+@app.command("init")
+def init_cmd(
+    config: Annotated[
+        Path | None,
+        typer.Option(help="Backup YAML config path."),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run/--apply", help="Preview by default; --apply runs borg init."),
+    ] = True,
+) -> None:
+    """Initialize the encrypted Borg repository on the Storage Box."""
+    try:
+        backup_config = load_backup_config(config)
+        result = init_backup_repository(
+            backup_config,
+            target=state.target,
+            timeout=state.config.command_timeout_seconds,
+            dry_run=dry_run,
+            allow_mutations=state.config.allow_mutations,
+        )
+    except (
+        BackupConfigError,
+        BackupRunError,
+        borg.BorgError,
+        OSError,
+        PermissionError,
+        ValueError,
+    ) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    if state.json_output:
+        emit(result)
+    else:
+        mode = "DRY-RUN" if dry_run else "APPLY"
+        typer.echo(f"Backup init ({mode}): ok={result.get('ok')} — {result.get('summary')}")
+    if not result.get("ok"):
+        raise typer.Exit(1)
+
+
 @app.command("run")
-def run_cmd() -> None:
-    """Run a backup (not implemented yet)."""
-    _not_ready("run")
+def run_cmd(
+    config: Annotated[
+        Path | None,
+        typer.Option(help="Backup YAML config path."),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run/--apply", help="Preview by default; --apply creates an archive."),
+    ] = True,
+    skip_storage_box: Annotated[
+        bool,
+        typer.Option("--skip-storage-box", help="Skip Storage Box TCP check during preflight."),
+    ] = False,
+) -> None:
+    """Run a files-only backup (dry-run by default)."""
+    try:
+        backup_config = load_backup_config(config)
+        result = run_backup(
+            backup_config,
+            target=state.target,
+            timeout=state.config.command_timeout_seconds,
+            dry_run=dry_run,
+            allow_mutations=state.config.allow_mutations,
+            skip_storage_box=skip_storage_box,
+        )
+    except (
+        BackupConfigError,
+        BackupLockError,
+        BackupRunError,
+        borg.BorgError,
+        OSError,
+        PermissionError,
+        ValueError,
+    ) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
 
-
-@app.command("check")
-def check_cmd() -> None:
-    """Repository check (not implemented yet)."""
-    _not_ready("check")
+    if state.json_output:
+        emit(result)
+    else:
+        mode = "DRY-RUN" if dry_run else "APPLY"
+        typer.echo(f"Backup run ({mode}): ok={result.get('ok')} — {result.get('summary')}")
+        for note in result.get("notes") or []:
+            typer.echo(f"  note: {note}")
+        for step in result.get("steps") or []:
+            step_result = step.get("result") or {}
+            typer.echo(
+                f"  step[{step.get('name')}]: "
+                f"ok={step_result.get('ok', step_result.get('status'))} "
+                f"{step_result.get('summary', '')}"
+            )
+    if not result.get("ok"):
+        raise typer.Exit(1)
 
 
 @app.command("list")
-def list_cmd() -> None:
-    """List archives (not implemented yet)."""
-    _not_ready("list")
+def list_cmd(
+    config: Annotated[
+        Path | None,
+        typer.Option(help="Backup YAML config path."),
+    ] = None,
+) -> None:
+    """List archives in the configured repository (read-only)."""
+    try:
+        backup_config = load_backup_config(config)
+        result = borg.list_archives(
+            backup_config,
+            target=state.target,
+            timeout=state.config.command_timeout_seconds,
+        )
+    except (BackupConfigError, borg.BorgError, OSError, PermissionError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    if state.json_output:
+        emit(result)
+    else:
+        typer.echo(f"Backup list: ok={result.get('ok')} — {result.get('summary')}")
+        if result.get("stdout"):
+            typer.echo(result["stdout"])
+    if not result.get("ok"):
+        raise typer.Exit(1)
+
+
+@app.command("check")
+def check_cmd(
+    config: Annotated[
+        Path | None,
+        typer.Option(help="Backup YAML config path."),
+    ] = None,
+    full: Annotated[
+        bool,
+        typer.Option("--full", help="Run a full check instead of repository-only."),
+    ] = False,
+) -> None:
+    """Run a repository check (read-only; lightweight by default)."""
+    try:
+        backup_config = load_backup_config(config)
+        result = borg.check_repository(
+            backup_config,
+            target=state.target,
+            timeout=state.config.command_timeout_seconds,
+            full=full,
+        )
+    except (BackupConfigError, borg.BorgError, OSError, PermissionError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    if state.json_output:
+        emit(result)
+    else:
+        typer.echo(f"Backup check: ok={result.get('ok')} — {result.get('summary')}")
+        if result.get("stdout"):
+            typer.echo(result["stdout"])
+    if not result.get("ok"):
+        raise typer.Exit(1)
 
 
 @app.command("restore")

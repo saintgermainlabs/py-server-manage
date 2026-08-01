@@ -84,8 +84,9 @@ uv run serverops backup generate-config
 uv run serverops backup install --dry-run
 uv run serverops backup preflight
 uv run serverops backup init --dry-run
-uv run serverops backup list
 uv run serverops backup run --dry-run
+uv run serverops backup list
+uv run serverops backup check
 uv run serverops diagnostics doctor
 uv run serverops coolify health
 uv run serverops tailscale nodes
@@ -105,8 +106,9 @@ Example settings: [`config/backup.example.yaml`](config/backup.example.yaml).
 
 ## Safety
 
-- Diagnostics and `backup discover` / `preflight` are read-only.
-- `backup install` defaults to dry-run; `--apply` is required to write live files.
+- Diagnostics and `backup discover` / `preflight` / `list` / `check` are read-only.
+- `backup install`, `backup init`, and `backup run` default to dry-run; `--apply` is required to mutate.
+- `--apply` also requires `allow_mutations: true` in the host ServerOps config.
 - Never commit secrets, Borg passphrases, or Coolify tokens.
 
 ## Tests

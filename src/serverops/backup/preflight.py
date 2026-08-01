@@ -7,6 +7,7 @@ import socket
 from pathlib import Path
 from typing import Any
 
+from serverops.backup.credentials import load_credentials_env
 from serverops.backup.models import BackupConfigModel
 from serverops.models import Status, Target
 from serverops.utils.command import run_read_only
@@ -20,9 +21,15 @@ def run_preflight(
     target: Target,
     timeout: int,
     check_storage_box: bool = True,
+    require_credentials: bool = False,
 ) -> dict[str, Any]:
-    """Validate tools, paths, and optional Storage Box TCP reachability."""
+    """Validate tools, paths, and optional Storage Box TCP reachability.
+
+    When ``require_credentials`` is true (mutating apply paths), missing SSH key
+    or credentials file are errors rather than warnings.
+    """
     checks: list[dict[str, Any]] = []
+    cred_status = Status.ERROR if require_credentials else Status.WARNING
 
     for tool, binary in (
         ("borg", "borg"),
@@ -82,7 +89,7 @@ def run_preflight(
         checks.append(
             _check(
                 name="ssh_key",
-                status=Status.WARNING,
+                status=cred_status,
                 summary=f"Cannot access SSH key path {key}: {exc}",
                 evidence={"path": str(key)},
             )
@@ -102,7 +109,7 @@ def run_preflight(
             checks.append(
                 _check(
                     name="ssh_key",
-                    status=Status.WARNING,
+                    status=cred_status,
                     summary=f"SSH key missing (create on server): {key}",
                     evidence={"path": str(key)},
                 )
@@ -115,11 +122,12 @@ def run_preflight(
         checks.append(
             _check(
                 name="credentials_file",
-                status=Status.WARNING,
+                status=cred_status,
                 summary=f"Cannot access credentials path {creds}: {exc}",
                 evidence={"path": str(creds)},
             )
         )
+        creds_exists = False
     else:
         if creds_exists:
             checks.append(
@@ -134,8 +142,51 @@ def run_preflight(
             checks.append(
                 _check(
                     name="credentials_file",
-                    status=Status.WARNING,
+                    status=cred_status,
                     summary=f"Credentials file not found yet: {creds}",
+                    evidence={"path": str(creds)},
+                )
+            )
+
+    if (
+        require_credentials
+        and not config.repository.is_placeholder()
+        and key_exists
+        and creds_exists
+    ):
+        try:
+            file_env = load_credentials_env(creds)
+            passphrase = file_env.get(config.repository.passphrase_environment_variable, "").strip()
+            if not passphrase:
+                checks.append(
+                    _check(
+                        name="passphrase",
+                        status=Status.ERROR,
+                        summary=(
+                            f"{config.repository.passphrase_environment_variable} "
+                            "missing or empty in credentials file"
+                        ),
+                        evidence={"path": str(creds)},
+                    )
+                )
+            else:
+                checks.append(
+                    _check(
+                        name="passphrase",
+                        status=Status.OK,
+                        summary=(
+                            f"{config.repository.passphrase_environment_variable} "
+                            "is set in credentials file"
+                        ),
+                        evidence={"path": str(creds)},
+                    )
+                )
+        except OSError as exc:
+            checks.append(
+                _check(
+                    name="passphrase",
+                    status=Status.ERROR,
+                    summary=f"Cannot read credentials file: {exc}",
                     evidence={"path": str(creds)},
                 )
             )
@@ -180,6 +231,7 @@ def run_preflight(
             "error_count": errors,
             "warning_count": warnings,
             "repository_placeholder": config.repository.is_placeholder(),
+            "require_credentials": require_credentials,
             "checks": checks,
         }
     )
