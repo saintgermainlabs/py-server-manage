@@ -167,17 +167,13 @@ repository:
   ssh_key: /root/.ssh/server-backup-storagebox
 ```
 
-Put the Borg passphrase in `/etc/server-backup/credentials.env` (`0600`):
+Put the Borg passphrase in Vault KV (`secret/py-server-manage/backup/borg`,
+field `passphrase`) and keep a local fallback in
+`/etc/server-backup/credentials.env` (`0600`) until Vault Agent is rendering
+`/etc/server-backup/borg-passphrase`. See [deploy/vault/README.md](../deploy/vault/README.md).
 
-```bash
-BORG_PASSPHRASE=…strong unique passphrase…
-# Optional later (healthchecks / cronitors) — leave commented until monitoring is on:
-# BACKUP_START_URL=
-# BACKUP_SUCCESS_URL=
-# BACKUP_FAILURE_URL=
-```
-
-Store the passphrase in 1Password. Losing it means backups cannot be restored.
+Also keep a human recovery copy in a password manager. Losing every copy means
+backups cannot be restored.
 
 ### Keep borgmatic in sync
 
@@ -270,6 +266,8 @@ sudo journalctl -u server-backup.service -n 50 --no-pager
 | SSH to Storage Box fails | Wrong key/user/port | Test with `-p 23` and the dedicated key |
 | `borg init` fails missing parent | No `borg/` on the box | `mkdir borg` on the Storage Box |
 | Timeout during init/run | Default 20s too short | `command_timeout_seconds: 300` under root config |
+| `printenv BORG_PASSPHRASE` fails under `borgmatic.service` | Distro unit does not load `credentials.env` | Drop-in `/etc/systemd/system/borgmatic.service.d/credentials.conf` with `EnvironmentFile=-/etc/server-backup/credentials.env`, then `daemon-reload` |
+| Vault sealed / 503 on `vault.tiger-bushmaster.ts.net` | Raft sealed (3-of-5 Shamir) | Unseal from a local terminal (`vault operator unseal` ×3). Do not paste unseal keys into chat. Keep `credentials.env` until Agent has rendered `/etc/server-backup/borg-passphrase`. |
 
 ## Not yet automated
 

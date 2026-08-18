@@ -108,6 +108,23 @@ def test_load_credentials_env(tmp_path: Path) -> None:
     assert loaded["EMPTY"] == ""
 
 
+def test_resolve_passphrase_prefers_env_file_then_passphrase_file(tmp_path: Path) -> None:
+    from serverops.backup.credentials import resolve_passphrase
+
+    creds = tmp_path / "credentials.env"
+    creds.write_text("# empty passphrase fallback\n", encoding="utf-8")
+    secret = tmp_path / "borg-passphrase"
+    secret.write_text("fake-passphrase-from-vault-file\n", encoding="utf-8")
+    config = BackupConfigModel(
+        repository=RepositoryConfig(passphrase_file=str(secret)),
+        deploy={"credentials_file": str(creds)},
+    )
+    assert resolve_passphrase(config) == "fake-passphrase-from-vault-file"
+
+    creds.write_text("BORG_PASSPHRASE=fake-passphrase-from-env-file\n", encoding="utf-8")
+    assert resolve_passphrase(config) == "fake-passphrase-from-env-file"
+
+
 def test_scrub_output_removes_passphrase() -> None:
     cleaned = scrub_output("secret fake-passphrase-value-xyz here", ["fake-passphrase-value-xyz"])
     assert "fake-passphrase-value-xyz" not in cleaned
@@ -193,7 +210,8 @@ def test_run_dry_run_default_no_mutating_commands(tmp_path: Path) -> None:
     assert result["ok"] is True
     assert result["dry_run"] is True
     assert calls == []
-    assert any("files-only" in note for note in result["notes"])
+    assert any(step.get("name") == "databases" for step in result["steps"])
+    assert any("dump" in note.lower() or "database" in note.lower() for note in result["notes"])
 
 
 def test_run_apply_creates_and_checks(tmp_path: Path) -> None:

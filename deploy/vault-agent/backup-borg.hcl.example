@@ -1,0 +1,32 @@
+# Vault Agent config for the Borg passphrase (and later DB allowlist).
+# Copy to /etc/vault-agent.d/backup-borg.hcl on the Coolify host.
+# Do not commit real RoleIDs, SecretIDs, or rendered credential files.
+
+pid_file = "/run/vault-agent-backup/agent.pid"
+
+vault {
+  address = "https://vault.tiger-bushmaster.ts.net"
+}
+
+auto_auth {
+  method "approle" {
+    config = {
+      role_id_file_path                   = "/etc/serverops/credentials/vault-role-id"
+      secret_id_file_path                 = "/etc/serverops/credentials/vault-secret-id"
+      remove_secret_id_file_after_reading = false
+    }
+  }
+
+  sink "file" {
+    config = {
+      path = "/run/vault-agent-backup/token"
+      mode = 0600
+    }
+  }
+}
+
+template {
+  source      = "/opt/py-server-manage/deploy/vault-agent/templates/borg-passphrase.ctmpl"
+  destination = "/etc/server-backup/borg-passphrase"
+  perms       = "0600"
+}

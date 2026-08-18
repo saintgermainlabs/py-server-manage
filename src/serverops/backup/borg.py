@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from serverops.backup.credentials import load_credentials_env
+from serverops.backup.credentials import load_credentials_env, resolve_passphrase
 from serverops.backup.models import BackupConfigModel
 from serverops.models import CommandResult, Target
 from serverops.runner import run_command
@@ -60,10 +60,14 @@ def build_borg_env(
     file_env = load_credentials_env(config.deploy.credentials_file)
     env.update(file_env)
     passphrase_key = config.repository.passphrase_environment_variable
-    passphrase = env.get(passphrase_key, "").strip()
+    passphrase = resolve_passphrase(config) or env.get(passphrase_key, "").strip()
+    if passphrase:
+        env[passphrase_key] = passphrase
     if require_passphrase and not passphrase:
         raise BorgError(
-            f"{passphrase_key} is missing or empty (set it in {config.deploy.credentials_file})"
+            f"{passphrase_key} is missing or empty "
+            f"(set it in {config.deploy.credentials_file} or "
+            f"{config.repository.passphrase_file})"
         )
     env["BORG_RSH"] = ssh_command_for(config)
     env["BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK"] = "no"

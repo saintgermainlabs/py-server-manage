@@ -7,7 +7,7 @@ import socket
 from pathlib import Path
 from typing import Any
 
-from serverops.backup.credentials import load_credentials_env
+from serverops.backup.credentials import load_credentials_env, load_passphrase_file
 from serverops.backup.models import BackupConfigModel
 from serverops.models import Status, Target
 from serverops.utils.command import run_read_only
@@ -158,13 +158,16 @@ def run_preflight(
             file_env = load_credentials_env(creds)
             passphrase = file_env.get(config.repository.passphrase_environment_variable, "").strip()
             if not passphrase:
+                passphrase = load_passphrase_file(config.repository.passphrase_file)
+            if not passphrase:
                 checks.append(
                     _check(
                         name="passphrase",
                         status=Status.ERROR,
                         summary=(
                             f"{config.repository.passphrase_environment_variable} "
-                            "missing or empty in credentials file"
+                            "missing or empty in credentials file and "
+                            f"{config.repository.passphrase_file} is empty or missing"
                         ),
                         evidence={"path": str(creds)},
                     )
@@ -174,10 +177,7 @@ def run_preflight(
                     _check(
                         name="passphrase",
                         status=Status.OK,
-                        summary=(
-                            f"{config.repository.passphrase_environment_variable} "
-                            "is set in credentials file"
-                        ),
+                        summary="Borg passphrase is available locally",
                         evidence={"path": str(creds)},
                     )
                 )

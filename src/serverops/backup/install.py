@@ -76,6 +76,10 @@ def build_install_plan(
             generated_dir / "server-backup-check.timer",
             Path(deploy.systemd_dir) / "server-backup-check.timer",
         ),
+        (
+            generated_dir / "borgmatic.service.d" / "credentials.conf",
+            Path(deploy.systemd_dir) / "borgmatic.service.d" / "credentials.conf",
+        ),
     ]
 
     for source, destination in mappings:

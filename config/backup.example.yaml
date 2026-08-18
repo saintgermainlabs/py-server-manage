@@ -23,6 +23,11 @@ repository:
   url: ssh://STORAGE_USER@STORAGE_HOST:23/./borg/server-primary
   ssh_key: /root/.ssh/server-backup-storagebox
   passphrase_environment_variable: BORG_PASSPHRASE
+  # Vault KV source of truth (Agent renders passphrase_file):
+  #   secret/py-server-manage/backup/borg  field=passphrase
+  passphrase_file: /etc/server-backup/borg-passphrase
+  passphrase_vault_path: py-server-manage/backup/borg
+  passphrase_vault_field: passphrase
 
 sources:
   mandatory:
@@ -35,7 +40,9 @@ sources:
     - /usr/local/bin
     - /usr/local/sbin
     - /root/.ssh
-  additional: []
+  additional:
+    - /srv/data/obsidian-vault/vaults
+    - /srv/data/obsidian-vault/agent
 
 exclusions:
   - /proc
@@ -47,6 +54,16 @@ exclusions:
   - /var/cache
   - /var/lib/docker/overlay2
   - /var/lib/docker/image
+  - "**/.git"
+  - "**/.github"
+  - "**/.gitea"
+  - "**/.stfolder"
+  - "**/.stversions"
+  - "**/.trash"
+  - "**/documentation-imports"
+  - "**/workspace.json"
+  - "**/workspace-mobile.json"
+  - "**/node_modules"
 
 databases: []
 # Prefer the dedicated allowlist rendered by Vault Agent:

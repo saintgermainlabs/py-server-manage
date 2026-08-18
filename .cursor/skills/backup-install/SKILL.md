@@ -23,7 +23,12 @@ passphrases, Storage Box passwords, or private keys.
 - [ ] Parent dir on box exists (`mkdir borg` for `./borg/server-primary`)
 - [ ] `/root/.config/py-server-manage/config.yaml` has allow_mutations + long timeout
 - [ ] Real URL in BOTH `/etc/server-backup/backup.yaml` and `/etc/borgmatic/config.yaml`
-- [ ] `BORG_PASSPHRASE` in `/etc/server-backup/credentials.env` (0600)
+- [ ] Borg passphrase in Vault KV `secret/py-server-manage/backup/borg` **or**
+      `/etc/server-backup/credentials.env` (0600) while Vault is sealed
+- [ ] After Agent is running: `/etc/server-backup/borg-passphrase` (0600) and
+      borgmatic `encryption_passcommand: cat /etc/server-backup/borg-passphrase`
+- [ ] Drop-in `/etc/systemd/system/borgmatic.service.d/credentials.conf` loads
+      `credentials.env` until the passphrase file is in use
 ```
 
 ## Agent rules
@@ -35,7 +40,12 @@ passphrases, Storage Box passwords, or private keys.
 5. Never commit `/etc/server-backup/*`, keys, or passphrases. Repo examples stay placeholders.
 6. Keep `backup.yaml` and borgmatic repository URLs identical.
 7. Do not enable systemd backup timers until `backup run --apply` succeeds once.
-8. Current `run` is files-only; do not invent DB dump steps.
+8. Phase 1 dumps: PostgreSQL via docker exec. Use
+   `config/databases.priority.yaml` → `/etc/server-backup/databases.yaml`
+   (Coolify control-plane DB + Medusa production).
+9. Ensure borgmatic `source_directories` includes `/var/lib/server-backup/staging`
+   so dumps are archived.
+10. Current MySQL/MariaDB/Mongo dump engines are not implemented yet.
 
 ## Standard workflow
 

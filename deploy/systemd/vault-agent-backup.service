@@ -1,0 +1,24 @@
+[Unit]
+Description=Vault Agent for Borg passphrase render
+After=network-online.target docker.service
+Wants=network-online.target
+# Vault on this host is a Coolify container; Agent talks to the tailnet address.
+# Template bind-mount: live clone is /home/dom/py-server-manage; hcl still
+# references /opt/py-server-manage inside the container.
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5
+ExecStart=/usr/bin/docker run --rm --name vault-agent-backup --network=host --user 0:0 --cap-add IPC_LOCK --entrypoint vault \
+  -v /etc/vault-agent.d/backup-borg.hcl:/config.hcl:ro \
+  -v /etc/serverops/credentials:/etc/serverops/credentials:ro \
+  -v /home/dom/py-server-manage/deploy/vault-agent/templates:/opt/py-server-manage/deploy/vault-agent/templates:ro \
+  -v /etc/server-backup:/etc/server-backup \
+  -v /run/vault-agent-backup:/run/vault-agent-backup \
+  hashicorp/vault:1.17 \
+  agent -config=/config.hcl
+ExecStop=/usr/bin/docker stop vault-agent-backup
+
+[Install]
+WantedBy=multi-user.target

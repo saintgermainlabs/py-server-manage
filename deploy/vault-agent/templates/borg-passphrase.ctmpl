@@ -1,0 +1,12 @@
+{{/*
+  Vault Agent template → /etc/server-backup/borg-passphrase (0600 root:root).
+
+  KV v2:
+    secret/data/py-server-manage/backup/borg
+      passphrase  (string)
+
+  Do not commit the rendered file. The template emits only the secret, with no
+  trailing newline, so borgmatic `encryption_passcommand: cat …` is exact.
+*/}}{{- with secret "secret/data/py-server-manage/backup/borg" -}}
+{{- .Data.data.passphrase | trimSpace -}}
+{{- end -}}

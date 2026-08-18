@@ -27,6 +27,11 @@ class RepositoryConfig(BaseModel):
     url: str = "ssh://STORAGE_USER@STORAGE_HOST:23/./borg/server-primary"
     ssh_key: str = "/root/.ssh/server-backup-storagebox"
     passphrase_environment_variable: str = "BORG_PASSPHRASE"
+    # Vault Agent renders this file from KV; borgmatic encryption_passcommand cats it.
+    passphrase_file: str = "/etc/server-backup/borg-passphrase"
+    passphrase_vault_mount: str = "secret"
+    passphrase_vault_path: str = "py-server-manage/backup/borg"
+    passphrase_vault_field: str = "passphrase"
 
     def is_placeholder(self) -> bool:
         return "STORAGE_HOST" in self.url or "STORAGE_USER" in self.url

@@ -1,4 +1,18 @@
-## Vault Agent vs Transit snapshot
+## Borg passphrase (Vault KV)
+
+Source of truth:
+
+```text
+secret/py-server-manage/backup/borg  →  field passphrase
+```
+
+Vault Agent (`deploy/vault-agent/backup-borg.hcl.example`) renders
+`/etc/server-backup/borg-passphrase`. That is a cache: nightly borgmatic cats
+the file, so a sealed Vault does not fail the backup.
+
+Policy, AppRole, seed, and systemd unit: [deploy/vault/README.md](../vault/README.md).
+
+## Vault Agent vs Transit snapshot (databases)
 
 Two complementary ways to handle `databases.yaml`:
 

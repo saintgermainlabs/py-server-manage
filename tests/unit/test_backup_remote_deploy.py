@@ -23,6 +23,7 @@ def test_generate_configs_writes_expected_files(tmp_path: Path) -> None:
         "timer",
         "check_service",
         "check_timer",
+        "borgmatic_dropin",
     }
     for path in written.values():
         assert path.is_file()
@@ -34,8 +35,10 @@ def test_generate_configs_writes_expected_files(tmp_path: Path) -> None:
     )
     assert "/data" in borgmatic["source_directories"]
     assert "STORAGE_HOST" in borgmatic["repositories"][0]["path"]
-    assert "printenv BORG_PASSPHRASE" in text
+    assert "printenv BORG_PASSPHRASE" in text or "cat /etc/server-backup/borg-passphrase" in text
     assert "UMask=0077" in written["service"].read_text(encoding="utf-8")
+    dropin = written["borgmatic_dropin"].read_text(encoding="utf-8")
+    assert "EnvironmentFile=-/etc/server-backup/credentials.env" in dropin
     creds = written["credentials_example"].read_text(encoding="utf-8")
     assert "BORG_PASSPHRASE=" in creds
     assert "super-secret" not in creds
@@ -86,6 +89,9 @@ def test_install_apply_to_temp_tree(tmp_path: Path) -> None:
     assert Path(config.deploy.borgmatic_config).is_file()
     assert Path(config.deploy.credentials_file).is_file()
     assert (Path(config.deploy.systemd_dir) / "server-backup.timer").is_file()
+    assert (
+        Path(config.deploy.systemd_dir) / "borgmatic.service.d" / "credentials.conf"
+    ).is_file()
 
     again = install_backup_system(config, dry_run=False, force=False, generated_dir=generated)
     assert again["ok"] is True
