@@ -41,8 +41,8 @@ sources:
     - /usr/local/sbin
     - /root/.ssh
   additional:
-    - /srv/data/obsidian-vault/vaults
-    - /srv/data/obsidian-vault/agent
+    - /srv/knowledge-base/vaults
+    - /srv/knowledge-base/agent
 
 exclusions:
   - /proc

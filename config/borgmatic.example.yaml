@@ -6,8 +6,8 @@ source_directories:
   - /srv/projects
   - /opt
   - /home/dom/projects
-  - /srv/data/obsidian-vault/vaults
-  - /srv/data/obsidian-vault/agent
+  - /srv/knowledge-base/vaults
+  - /srv/knowledge-base/agent
 
 repositories:
   - path: ssh://STORAGE_USER@STORAGE_HOST:23/./borg/server-primary

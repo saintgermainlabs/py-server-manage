@@ -11,11 +11,11 @@ private keys.
 
 ```text
 Laptop  (/home/god/obsidian-vaults, branch flatten)
-   │  Syncthing (live files)
+   │  git push to Gitea (saintgermainlabs/obsidian-vaults)
    ▼
 Coolify host  SSH alias `ubuntu`  (user `dom`, hostname Ubuntu-24)
-   /srv/data/obsidian-vault/{vaults,agent}   live Obsidian
-   /home/dom/py-server-manage                git clone (not /opt)
+   /srv/knowledge-base/{vaults,agent}         live knowledge-base (git)
+   /home/dom/py-server-manage                 git clone (not /opt)
    borgmatic.timer  →  borgmatic.service     nightly files archive
    vault-agent-backup.service                renders Borg passphrase
    HashiCorp Vault  https://vault.tiger-bushmaster.ts.net
@@ -29,8 +29,11 @@ Hetzner Storage Box
 Do **not** enable a second restic timer for the vaults. Production backup is
 this borgmatic job.
 
-Keep **Syncthing** for laptop↔server live files. Do not add Obsidian LiveSync
-or official Obsidian Headless (`ob`) unless explicitly requested.
+Server knowledge is the Gitea `flatten` checkout at `/srv/knowledge-base`
+(notify-pull job `REPO_PATH`). It is not Obsidian-managed. Leave
+`/srv/data/obsidian-vault` in place until it is deleted on purpose; do not
+confuse it with `/srv/knowledge`. Do not add Obsidian LiveSync or official
+Obsidian Headless (`ob`) unless explicitly requested.
 
 ## Access notes
 
@@ -111,8 +114,8 @@ Template bind-mount maps
 - `/etc`
 - `/usr/local/bin`, `/usr/local/sbin`
 - `/root/.ssh`
-- `/srv/data/obsidian-vault/vaults`
-- `/srv/data/obsidian-vault/agent`
+- `/srv/knowledge-base/vaults`
+- `/srv/knowledge-base/agent`
 
 Obsidian-related excludes: `**/.git`, `**/.github`, `**/.gitea`, `**/.stfolder`,
 `**/.stversions`, `**/.trash`, `**/documentation-imports`, `**/workspace.json`,
