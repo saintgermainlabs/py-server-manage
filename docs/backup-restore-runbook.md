@@ -5,7 +5,11 @@ Full-server recovery order (from the agent plan):
 1. Provision a clean compatible Ubuntu server.
 2. Patch and secure it.
 3. Install Borg, borgmatic, Docker, and database clients.
-4. Retrieve recovery credentials from independent storage.
+4. Retrieve the Borg passphrase from **independent** storage (Vaultwarden or
+   printed recovery), **not** only from this host. Vault KV
+   `secret/py-server-manage/backup/borg` and `/etc/server-backup/borg-passphrase`
+   live on the same Coolify box as Vault itself. If the disk is gone, you need
+   an off-host copy before you can restore Vault or Vaultwarden.
 5. Connect to the Storage Box and list archives.
 6. Verify the repository.
 7. Restore selected host configuration into a temporary directory first.

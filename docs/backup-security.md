@@ -21,5 +21,6 @@
 - Store a recovery copy of the Borg passphrase in a password manager (Vaultwarden
   is fine for humans). Loss of every copy means unrecoverable archives.
 - Unattended retrieval is HashiCorp Vault KV + Vault Agent, not Vaultwarden.
-  See [deploy/vault/README.md](../deploy/vault/README.md). If Vault is sealed,
+  See [backup-live.md](backup-live.md) and
+  [deploy/vault/README.md](../deploy/vault/README.md). If Vault is sealed,
   keep using the last rendered passphrase file / `credentials.env`.

@@ -18,6 +18,8 @@ Laptop (dev)  →  git push  →  Git remote
                          ssh://USER@HOST:23/./borg/server-primary
 ```
 
+**Live runtime (what is enabled today):** [backup-live.md](backup-live.md).
+
 **Repository** here means the encrypted Borg store on the Storage Box — not a git
 repo.
 

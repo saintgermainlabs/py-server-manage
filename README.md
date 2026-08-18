@@ -16,6 +16,7 @@ Backup and disaster recovery for the Hetzner Coolify server are the primary miss
 Do **not** run Borg archives from the laptop against server paths. Deploy this repo to the server with git.
 
 Full install guide: [`docs/backup-installation.md`](docs/backup-installation.md).
+What is running today: [`docs/backup-live.md`](docs/backup-live.md).
 
 ## Local install (laptop)
 

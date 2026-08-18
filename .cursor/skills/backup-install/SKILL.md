@@ -10,8 +10,9 @@ description: >-
 # Backup install (Hetzner + Storage Box)
 
 Operate Borg **on the Coolify/Hetzner server**, never as the backup destination
-from a laptop. Read `docs/backup-installation.md` and `AGENTS.md`. Do not print
-passphrases, Storage Box passwords, or private keys.
+from a laptop. Read `docs/backup-live.md` (what is running), then
+`docs/backup-installation.md` and `AGENTS.md`. Do not print passphrases,
+Storage Box passwords, or private keys.
 
 ## Preconditions checklist
 

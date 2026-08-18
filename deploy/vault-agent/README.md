@@ -11,6 +11,11 @@ Vault Agent (`deploy/vault-agent/backup-borg.hcl.example`) renders
 the file, so a sealed Vault does not fail the backup.
 
 Policy, AppRole, seed, and systemd unit: [deploy/vault/README.md](../vault/README.md).
+Live host map: [docs/backup-live.md](../../docs/backup-live.md).
+
+The Agent container must use `--user 0:0 --entrypoint vault --cap-add IPC_LOCK`
+(see `deploy/systemd/vault-agent-backup.service`). The stock Vault image
+entrypoint otherwise drops to user `vault` and cannot read `0600` AppRole files.
 
 ## Vault Agent vs Transit snapshot (databases)
 

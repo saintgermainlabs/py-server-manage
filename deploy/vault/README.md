@@ -60,8 +60,12 @@ Then shred the laptop copies.
 
 ## 2. Seed KV from the existing credentials file (on the host)
 
-Mint a short-lived token on the laptop (policy must allow KV write on
-`secret/data/py-server-manage/*` — the `py-server-manage` policy already does):
+The live `py-server-manage` AppRole policy is **Transit-only** (no KV write).
+Seed KV with an admin/OIDC token that can write
+`secret/data/py-server-manage/backup/borg`, or use `vault kv put` from a
+privileged laptop session. Do not copy a root token in shell history.
+
+Mint a short-lived token (or use OIDC) then:
 
 ```bash
 vault print token | install -m 0600 /dev/stdin /tmp/vault-token-seed
@@ -81,8 +85,10 @@ shred -u /home/dom/.vault-token-seed
 
 Install `deploy/vault-agent/backup-borg.hcl.example` as
 `/etc/vault-agent.d/backup-borg.hcl` and the unit
-`deploy/systemd/vault-agent-backup.service`. Confirm
-`/etc/server-backup/borg-passphrase` is `0600` and non-empty (do not `cat` it).
+`deploy/systemd/vault-agent-backup.service`. That unit must run the Vault
+image as `--user 0:0 --entrypoint vault --cap-add IPC_LOCK` or AppRole files
+mode `0600` are unreadable. Confirm `/etc/server-backup/borg-passphrase` is
+`0600` and non-empty (do not `cat` it). Live map: [docs/backup-live.md](../../docs/backup-live.md).
 
 Then set borgmatic `encryption_passcommand` to
 `cat /etc/server-backup/borg-passphrase` and `daemon-reload`. Keep
